@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ka"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>გველი</title>
+<style>
+:root{--bg:#eef0e6;--fg:#1f2a14;--mu:#5d6b49;--card:#dfe5cf;--ln:#b9c4a0;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141a0e;--fg:#e1ead0;--mu:#9fae86;--card:#1f2916;--ln:#34432a;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#141a0e;--fg:#e1ead0;--mu:#9fae86;--card:#1f2916;--ln:#34432a;color-scheme:dark}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--fg);font-family:system-ui,"Noto Sans Georgian",sans-serif}
+body{display:flex;flex-direction:column;align-items:center;gap:12px;padding:14px}
+.top{width:min(92vw,420px);display:flex;justify-content:space-between;align-items:baseline}
+h1{margin:0;font-size:22px;font-weight:500}
+.sc{display:flex;gap:14px;font-size:13px;color:var(--mu);font-variant-numeric:tabular-nums}
+.sc b{color:var(--fg);font-weight:500;font-size:18px}
+.bd{position:relative;width:max(220px,min(92vw,420px,calc(100dvh - 370px)));aspect-ratio:1;touch-action:none}
+canvas{width:100%;height:100%;display:block;border:3px solid #27351a;border-radius:8px;box-sizing:border-box;background:#7fae4a}
+.ov{position:absolute;inset:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:rgba(30,45,20,.82);color:#e2f0b8;text-align:center;border-radius:6px;padding:12px}
+.ov h2{margin:0;font-size:24px;font-weight:500}
+.ov p{margin:0;font-size:14px;opacity:.85}
+.ov[hidden]{display:none}
+html,body{touch-action:none;overscroll-behavior:none}
+.ctl{display:flex;gap:12px;align-items:center;justify-content:space-between;width:min(92vw,420px)}
+.ctl .pad{order:1}
+button{font:inherit;cursor:pointer;touch-action:manipulation}
+.go{padding:12px 28px;font-size:17px;border:0;border-radius:8px;background:#a9d45c;color:#1f2f10}
+.row{display:flex;flex-direction:column;gap:8px;flex:1}
+.ps{border:0.5px solid var(--ln);background:var(--card);color:var(--fg);border-radius:12px;padding:13px 8px;font-size:13px}
+.pad{display:grid;grid-template-columns:repeat(3,62px);grid-template-rows:repeat(3,62px);gap:6px}
+.pad button{border:0.5px solid var(--ln);background:var(--card);color:var(--fg);border-radius:18px;font-size:34px}
+.pad button:active{background:var(--ln)}
+.pad .u{grid-column:2;grid-row:1}.pad .l{grid-column:1;grid-row:2}.pad .d{grid-column:2;grid-row:3}.pad .r{grid-column:3;grid-row:2}
+</style></head><body>
+<div class="top"><h1>გველი</h1><div class="sc"><span>დონე <b id="lv">1</b></span><span>ქულა <b id="s">0</b></span><span>რეკორდი <b id="b">0</b></span></div></div>
+<div class="bd" id="bd"><canvas id="cv" width="800" height="800" role="img" aria-label="თამაშის ველი"></canvas>
+<div class="ov" id="ov"><h2 id="ot">გველი</h2><p id="op"></p><button class="go" id="go">დაწყება</button></div></div>
+<div class="ctl"><div class="row"><button class="ps" id="md">რეჟიმი: კედლები</button><button class="ps" id="sn">ხმა: ჩართ.</button><button class="ps" id="ps">პაუზა</button></div>
+<div class="pad"><button class="u" data-x="0" data-y="-1" aria-label="ზემოთ">↑</button><button class="l" data-x="-1" data-y="0" aria-label="მარცხნივ">←</button><button class="d" data-x="0" data-y="1" aria-label="ქვემოთ">↓</button><button class="r" data-x="1" data-y="0" aria-label="მარჯვნივ">→</button></div></div>
+<script>
+const $=id=>document.getElementById(id),cv=$('cv'),ctx=cv.getContext('2d'),N=16,S=50,W=800,PI=Math.PI;
+let snake,prev,dir,q,food,gold,goldEnd=0,goldRem=0,score,eaten,best=0,newBest=false,state='idle',last=0,delay=140,tt=1,wrap=false,sound=true,parts=[],flash=0,AC;
+const bg=document.createElement('canvas');bg.width=bg.height=W;
+(function(){const b=bg.getContext('2d');b.fillStyle='#7fae4a';b.fillRect(0,0,W,W);
+for(let i=0;i<N;i++)for(let j=0;j<N;j++)if((i+j)%2){b.fillStyle='#74a341';b.fillRect(i*S,j*S,S,S)}
+let sd=7;const r=()=>(sd=sd*16807%2147483647)/2147483647;
+for(let k=0;k<500;k++){b.fillStyle=r()>.5?'rgba(255,255,255,.07)':'rgba(0,40,0,.09)';b.fillRect(r()*W,r()*W,3+r()*5,2)}})();
+function loadBest(){best=0;try{best=+localStorage.getItem('snake-best-'+(wrap?'w':'k'))||0}catch(e){}}
+function saveBest(){try{localStorage.setItem('snake-best-'+(wrap?'w':'k'),best)}catch(e){}}
+function beep(f,d,ty){if(!sound)return;try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();const o=AC.createOscillator(),g=AC.createGain(),n=AC.currentTime;o.type=ty||'square';o.frequency.value=f;g.gain.setValueAtTime(.07,n);g.gain.exponentialRampToValueAtTime(.001,n+d);o.connect(g);g.connect(AC.destination);o.start();o.stop(n+d)}catch(e){}}
+function vib(p){try{navigator.vibrate&&navigator.vibrate(p)}catch(e){}}
+function free(){let c;do{c={x:Math.random()*N|0,y:Math.random()*N|0}}while(snake.some(s=>s.x==c.x&&s.y==c.y)||(food&&c.x==food.x&&c.y==food.y)||(gold&&c.x==gold.x&&c.y==gold.y));return c}
+function upd(){$('s').textContent=score;$('b').textContent=best;$('lv').textContent=1+Math.floor(eaten/5)}
+function overlay(t,p,b){$('ot').textContent=t;$('op').textContent=p;$('go').textContent=b;$('ov').hidden=false}
+function reset(){snake=[{x:8,y:8},{x:7,y:8},{x:6,y:8}];prev=snake.map(s=>({...s}));dir={x:1,y:0};q=[];score=0;eaten=0;delay=140;gold=null;parts=[];flash=0;tt=1;newBest=false;food=null;food=free();upd()}
+function burst(c,col){for(let i=0;i<16;i++){const a=Math.random()*2*PI,v=2+Math.random()*4;parts.push({x:(c.x+.5)*S,y:(c.y+.5)*S,vx:Math.cos(a)*v,vy:Math.sin(a)*v-1,l:1,c:col})}}
+function start(){if(state=='over')reset();const n=performance.now();if(state=='pause'&&gold)goldEnd=n+goldRem;state='run';last=n;$('ov').hidden=true}
+function pause(){if(state=='run'){state='pause';goldRem=goldEnd-performance.now();overlay('პაუზა','','გაგრძელება')}else if(state=='pause')start()}
+function end(){state='over';tt=1;flash=1;beep(220,.25,'sawtooth');setTimeout(()=>beep(140,.4,'sawtooth'),220);vib([60,40,140]);
+overlay('თამაში დასრულდა',(newBest?'ახალი რეკორდი! ':'')+'ქულა: '+score,'თავიდან')}
+function tick(now){
+if(q.length)dir=q.shift();
+let hx=snake[0].x+dir.x,hy=snake[0].y+dir.y;
+if(wrap){hx=(hx+N)%N;hy=(hy+N)%N}else if(hx<0||hy<0||hx>=N||hy>=N)return end();
+if(snake.some((s,i)=>i<snake.length-1&&s.x==hx&&s.y==hy))return end();
+prev=snake.map(s=>({...s}));snake.unshift({x:hx,y:hy});
+let ate=0;
+if(hx==food.x&&hy==food.y){ate=1;score++;eaten++;burst(food,'#e04040');food=null;food=free();delay=Math.max(62,140-eaten*3);
+if(eaten%5==0&&!gold){gold=free();goldEnd=now+7000}beep(660,.08);vib(15)}
+else if(gold&&hx==gold.x&&hy==gold.y){ate=1;score+=5;burst(gold,'#ffd34d');gold=null;beep(880,.12);setTimeout(()=>beep(1180,.14),90);vib(30)}
+if(!ate)snake.pop();
+if(score>best){best=score;newBest=true;saveBest()}
+upd();
+}
+function pos(i,t){const b=snake[i],a=prev[Math.min(i,prev.length-1)];
+let bx=b.x,by=b.y;
+if(bx-a.x>1)bx-=N;else if(a.x-bx>1)bx+=N;
+if(by-a.y>1)by-=N;else if(a.y-by>1)by+=N;
+return[(a.x+(bx-a.x)*t+.5)*S,(a.y+(by-a.y)*t+.5)*S]}
+function apple(c,col,leaf,k){const x=(c.x+.5)*S,y=(c.y+.5)*S,r=S*.36*k;
+ctx.fillStyle='rgba(0,0,0,.2)';ctx.beginPath();ctx.ellipse(x,y+r*.95,r*.9,r*.28,0,0,7);ctx.fill();
+ctx.fillStyle=col;for(const o of[[-.3,0,.78],[.3,0,.78],[0,.15,.9]]){ctx.beginPath();ctx.arc(x+o[0]*r,y+o[1]*r,o[2]*r,0,7);ctx.fill()}
+ctx.fillStyle='rgba(255,255,255,.55)';ctx.beginPath();ctx.ellipse(x-r*.45,y-r*.3,r*.2,r*.32,-.5,0,7);ctx.fill();
+if(leaf){ctx.strokeStyle='#5a3a1a';ctx.lineWidth=S*.07;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(x,y-r*.7);ctx.lineTo(x+r*.1,y-r*1.2);ctx.stroke();
+ctx.fillStyle='#3f8f2f';ctx.beginPath();ctx.ellipse(x+r*.55,y-r*1.05,r*.42,r*.2,-.5,0,7);ctx.fill()}}
+function draw(t,now){
+ctx.drawImage(bg,0,0);
+apple(food,'#d12f2f',true,1);
+if(gold){const rem=Math.max(0,(state=='run'?goldEnd-now:goldRem)/7000);apple(gold,'#f2b705',false,1.1+Math.sin(now/150)*.08);
+const gx=(gold.x+.5)*S,gy=(gold.y+.5)*S;ctx.strokeStyle='#ffe27a';ctx.lineWidth=4;ctx.beginPath();ctx.arc(gx,gy,S*.55,-PI/2,-PI/2+2*PI*rem);ctx.stroke()}
+const L=snake.length,P=[];for(let i=0;i<L;i++)P.push(pos(i,t));
+for(let i=1;i<L;i++)for(let k=0;k<2;k++){let d=P[i][k]-P[i-1][k];while(d>W/2){P[i][k]-=W;d-=W}while(d<-W/2){P[i][k]+=W;d+=W}}
+for(const ox of wrap?[-W,0,W]:[0])for(const oy of wrap?[-W,0,W]:[0]){ctx.save();ctx.translate(ox,oy);
+ctx.lineCap='round';ctx.lineJoin='round';
+function pass(col,ex,k,oy){ctx.strokeStyle=col;for(let i=L-1;i>0;i--){ctx.lineWidth=S*(.52+.3*(1-i/L))*k+ex;ctx.beginPath();ctx.moveTo(P[i][0],P[i][1]+oy);ctx.lineTo(P[i-1][0],P[i-1][1]+oy);ctx.stroke()}}
+pass('rgba(0,0,0,.22)',0,1,S*.07);pass('#1f4a1c',S*.08,1,0);pass('#3f9a3a',0,1,0);pass('#5db84e',0,.62,0);pass('#a6dc7a',0,.22,0);
+for(let i=1;i<L;i++){const w=S*(.52+.3*(1-i/L));ctx.fillStyle=i%2?'#2d7a2c':'#7fcf5c';ctx.beginPath();ctx.arc(P[i][0],P[i][1],w*.16,0,7);ctx.fill()}
+const[hx,hy]=P[0],dx=dir.x,dy=dir.y,qx=-dy,qy=dx;
+if((now/300|0)%2==0){ctx.strokeStyle='#d02020';ctx.lineWidth=S*.06;ctx.beginPath();
+ctx.moveTo(hx+dx*S*.4,hy+dy*S*.4);ctx.lineTo(hx+dx*S*.68,hy+dy*S*.68);
+ctx.moveTo(hx+dx*S*.68,hy+dy*S*.68);ctx.lineTo(hx+dx*S*.82+qx*S*.09,hy+dy*S*.82+qy*S*.09);
+ctx.moveTo(hx+dx*S*.68,hy+dy*S*.68);ctx.lineTo(hx+dx*S*.82-qx*S*.09,hy+dy*S*.82-qy*S*.09);ctx.stroke()}
+ctx.fillStyle='#3f9a3a';ctx.strokeStyle='#1f4a1c';ctx.lineWidth=S*.07;
+ctx.beginPath();ctx.ellipse(hx+dx*S*.04,hy+dy*S*.04,S*.52,S*.43,Math.atan2(dy,dx),0,7);ctx.fill();ctx.stroke();
+ctx.fillStyle='#5db84e';ctx.beginPath();ctx.ellipse(hx-dx*S*.05,hy-dy*S*.05,S*.3,S*.2,Math.atan2(dy,dx),0,7);ctx.fill();
+for(const e of[-1,1]){const ex=hx+dx*S*.14+qx*S*.23*e,ey=hy+dy*S*.14+qy*S*.23*e;
+ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(ex,ey,S*.115,0,7);ctx.fill();
+ctx.fillStyle='#111';ctx.beginPath();ctx.ellipse(ex+dx*S*.035,ey+dy*S*.035,S*.06,S*.085,Math.atan2(dy,dx)+PI/2,0,7);ctx.fill();
+ctx.fillStyle='#1f4a1c';ctx.beginPath();ctx.arc(hx+dx*S*.4+qx*S*.08*e,hy+dy*S*.4+qy*S*.08*e,S*.025,0,7);ctx.fill()}
+ctx.restore()}
+for(const p of parts){ctx.globalAlpha=Math.max(0,p.l);ctx.fillStyle=p.c;ctx.beginPath();ctx.arc(p.x,p.y,S*.1*p.l+1,0,7);ctx.fill()}
+ctx.globalAlpha=1;
+if(flash>0){ctx.fillStyle='rgba(220,30,30,'+flash*.35+')';ctx.fillRect(0,0,W,W)}
+}
+function frame(now){
+if(state=='run'){if(now-last>=delay){tick(now);if(state=='run')last=now}
+if(state=='run'){tt=Math.min(1,(now-last)/delay);if(gold&&now>goldEnd)gold=null}}
+for(const p of parts){p.x+=p.vx;p.y+=p.vy;p.vy+=.18;p.l-=.025}
+parts=parts.filter(p=>p.l>0);if(flash>0)flash-=.025;
+draw(tt,now);requestAnimationFrame(frame)}
+function turn(x,y){
+if(state=='pause')return;
+if(state!='run')start();
+const l=q.length?q[q.length-1]:dir;
+if((l.x==-x&&l.y==-y)||(l.x==x&&l.y==y))return;
+if(q.length<3)q.push({x,y})}
+$('go').onclick=()=>{if(state=='pause')pause();else start()};
+$('ps').onclick=pause;
+$('sn').onclick=()=>{sound=!sound;$('sn').textContent='ხმა: '+(sound?'ჩართ.':'გამორთ.')};
+$('md').onclick=()=>{wrap=!wrap;$('md').textContent='რეჟიმი: '+(wrap?'გავლით':'კედლები');cv.style.borderStyle=wrap?'dashed':'solid';loadBest();reset();state='idle';overlay('გველი',wrap?'კედლებში გაივლი მეორე მხრიდან':'კედელში შეჯახება დაგამარცხებს','დაწყება')};
+document.querySelectorAll('.pad button').forEach(b=>b.addEventListener('pointerdown',e=>{e.preventDefault();turn(+b.dataset.x,+b.dataset.y)}));
+const K={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],w:[0,-1],s:[0,1],a:[-1,0],d:[1,0]};
+document.addEventListener('keydown',e=>{
+if(e.key==' '){e.preventDefault();if(state=='run'||state=='pause')pause();else start();return}
+const k=K[e.key];if(k){e.preventDefault();turn(k[0],k[1])}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&state=='run')pause()});
+let sx,sy;const bd=$('bd');
+document.addEventListener('pointerdown',e=>{sx=e.clientX;sy=e.clientY});
+document.addEventListener('pointerup',e=>{if(sx==null)return;const dx=e.clientX-sx,dy=e.clientY-sy;sx=null;
+if(Math.max(Math.abs(dx),Math.abs(dy))<24)return;
+if(Math.abs(dx)>Math.abs(dy))turn(dx>0?1:-1,0);else turn(0,dy>0?1:-1)});
+loadBest();reset();
+overlay('გველი','გადაუსვი თითი, ისრები ან WASD. ყოველი მე-5 ვაშლის შემდეგ ოქროსი გამოჩნდება: +5 ქულა','დაწყება');
+requestAnimationFrame(frame);
+</script></body></html>
